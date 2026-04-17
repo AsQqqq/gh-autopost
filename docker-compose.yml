@@ -1,0 +1,21 @@
+services:
+  gh-autopost:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    # Normal mode (default)
+    # To run init mode once: docker compose run --rm gh-autopost --save
+
+  # Optional: run init once then exit
+  gh-autopost-init:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    command: ["--save"]
+    profiles:
+      - init
