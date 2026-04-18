@@ -5,8 +5,7 @@ services:
     env_file:
       - .env
     networks:
-      - default
-      - postgres_net
+      - server_server-net
 
   # Init mode: run once to record existing commits without posting
   # Usage: docker compose run --rm gh-autopost-init
@@ -18,10 +17,8 @@ services:
     profiles:
       - init
     networks:
-      - default
-      - postgres_net
+      - server_server-net
 
 networks:
-  postgres_net:
+  server_server-net:
     external: true
-    name: postgres_net
