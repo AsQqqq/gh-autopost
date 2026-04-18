@@ -8,7 +8,7 @@ Monitors GitHub repositories for new commits and publishes them to a Telegram ch
 - Posts to a specific topic (thread) in a Telegram supergroup/channel
 - Notifies admins after each publish
 - Deduplication via PostgreSQL — survives container restarts
-- Batches multiple commits into a single message (configurable threshold)
+- Batches multiple commits into chunks (configurable threshold)
 - Filters merge commits
 - Classifies commits by Conventional Commits prefixes with emoji labels
 - Timestamps in Moscow time (MSK)
@@ -38,14 +38,18 @@ Monitors GitHub repositories for new commits and publishes them to a Telegram ch
 🤖 GH AutoPost
 ```
 
+---
+
 ## Quick start
 
 ### Prerequisites
 
 - Docker & Docker Compose
-- PostgreSQL instance (can be a shared one)
+- PostgreSQL instance (can be a shared one in another container)
 - GitHub Personal Access Token
 - Telegram bot token from [@BotFather](https://t.me/BotFather)
+
+---
 
 ### 1. Clone and configure
 
@@ -53,35 +57,92 @@ Monitors GitHub repositories for new commits and publishes them to a Telegram ch
 git clone https://github.com/AsQqqq/gh-autopost.git
 cd gh-autopost
 cp .env.example .env
-# Fill in all variables in .env
 ```
+
+---
 
 ### 2. Prepare PostgreSQL
 
-Create a database for the service:
+#### Create a database and dedicated user
+
+Connect to your PostgreSQL container (replace `admin` with your superuser):
+
+```bash
+docker exec -it postgres psql -U admin -d postgres
+```
+
+Then run:
 
 ```sql
-CREATE DATABASE gh_autopost;
+CREATE USER gh_autopost WITH PASSWORD 'your_strong_password';
+CREATE DATABASE gh_autopost OWNER gh_autopost;
+GRANT ALL PRIVILEGES ON DATABASE gh_autopost TO gh_autopost;
 ```
 
-Then set `DATABASE_URL` in `.env`:
+Then connect to the new database and grant schema access:
 
+```bash
+docker exec -it postgres psql -U admin -d gh_autopost -c "GRANT ALL ON SCHEMA public TO gh_autopost;"
 ```
-DATABASE_URL=postgresql://user:password@hostname:5432/gh_autopost
+
+#### Connect to the same Docker network
+
+Find the network your PostgreSQL container is on:
+
+```bash
+docker inspect postgres --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}'
 ```
 
-If PostgreSQL runs in Docker on the same host, make sure both containers share the same network (see [Docker network](#docker-network) below).
+The `docker-compose.yml` is configured to join an external network. Update the network name if yours differs from `server_server-net`:
 
-### 3. Init mode — first run only
+```yaml
+networks:
+  your_network_name:
+    external: true
+```
 
-Saves all existing commits to the database **without posting to Telegram**.  
+---
+
+### 3. Fill in `.env`
+
+```bash
+nano .env
+```
+
+The minimum required variables:
+
+```env
+GITHUB_TOKEN=ghp_...
+REPOS=owner/repo1,owner/repo2
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_CHANNEL_ID=-1001234567890
+DATABASE_URL=postgresql://gh_autopost:your_strong_password@postgres:5432/gh_autopost
+```
+
+See [Configuration](#configuration) for the full list.
+
+---
+
+### 4. Build
+
+```bash
+docker compose build
+```
+
+---
+
+### 5. Init mode — first run only
+
+Saves all existing commits to the database **without posting to Telegram**.
 Run this once so the channel isn't flooded with historical commits.
 
 ```bash
-docker compose run --rm gh-autopost --save
+docker compose run --rm gh-autopost-init
 ```
 
-### 4. Start
+---
+
+### 6. Start
 
 ```bash
 docker compose up -d
@@ -93,58 +154,29 @@ The service will poll GitHub every `POLL_INTERVAL` seconds and publish only new 
 
 ## Configuration
 
-All settings are via environment variables. Copy `.env.example` to `.env` and fill in the values.
+All settings via environment variables. Copy `.env.example` to `.env` and fill in the values.
 
-| Variable               | Description                                                         | Required      |
-|------------------------|---------------------------------------------------------------------|---------------|
-| `GITHUB_TOKEN`         | GitHub Personal Access Token (classic), scope: `repo`              | Yes           |
-| `REPOS`                | Comma-separated repos: `owner/repo1,owner/repo2`                   | Yes           |
-| `BRANCHES`             | Comma-separated branches to monitor                                 | No (main)     |
-| `TELEGRAM_BOT_TOKEN`   | Bot token from @BotFather                                           | Yes           |
-| `TELEGRAM_CHANNEL_ID`  | Channel/supergroup ID (e.g. `-1001234567890`)                       | Yes           |
-| `TELEGRAM_TOPIC_ID`    | Topic (thread) ID inside the channel (`0` = no topic)              | No (0)        |
-| `ADMIN_IDS`            | Comma-separated Telegram user IDs to notify after each publish     | No            |
-| `DATABASE_URL`         | PostgreSQL DSN: `postgresql://user:pass@host:5432/dbname`           | Yes           |
-| `POLL_INTERVAL`        | Poll interval in seconds                                            | No (30)       |
-| `BATCH_THRESHOLD`      | Commit count that triggers batched message instead of individual   | No (3)        |
-| `FILTER_MERGE_COMMITS` | Skip merge commits (`true`/`false`)                                 | No (true)     |
-| `MAX_COMMITS_PER_RUN`  | Max commits fetched per repo/branch per run                         | No (100)      |
-| `SIGNATURE`            | Text appended to every published message                            | No            |
-
----
-
-## Docker network
-
-If your PostgreSQL runs in another Docker Compose project, connect both containers to a shared external network.
-
-**Create the network once:**
-
-```bash
-docker network create postgres_net
-```
-
-**Add your PostgreSQL container to it** (in its `docker-compose.yml`):
-
-```yaml
-networks:
-  postgres_net:
-    external: true
-    name: postgres_net
-```
-
-**`gh-autopost` is already configured** to join `postgres_net` — see `docker-compose.yml`.
-
-Then use the Postgres container name as the hostname in `DATABASE_URL`:
-
-```
-DATABASE_URL=postgresql://user:password@postgres:5432/gh_autopost
-```
+| Variable               | Description                                                        | Required    |
+|------------------------|--------------------------------------------------------------------|-------------|
+| `GITHUB_TOKEN`         | GitHub Personal Access Token (classic), scope: `repo`             | Yes         |
+| `REPOS`                | Comma-separated repos: `owner/repo1,owner/repo2`                  | Yes         |
+| `BRANCHES`             | Comma-separated branches to monitor                                | No (main)   |
+| `TELEGRAM_BOT_TOKEN`   | Bot token from @BotFather                                          | Yes         |
+| `TELEGRAM_CHANNEL_ID`  | Channel/supergroup ID (e.g. `-1001234567890`)                      | Yes         |
+| `TELEGRAM_TOPIC_ID`    | Topic (thread) ID inside the channel (`0` = no topic)             | No (0)      |
+| `ADMIN_IDS`            | Comma-separated Telegram user IDs to notify after each publish    | No          |
+| `DATABASE_URL`         | PostgreSQL DSN: `postgresql://user:pass@host:5432/dbname`          | Yes         |
+| `POLL_INTERVAL`        | Poll interval in seconds                                           | No (30)     |
+| `BATCH_THRESHOLD`      | Commit count that triggers batched message instead of individual  | No (3)      |
+| `FILTER_MERGE_COMMITS` | Skip merge commits (`true`/`false`)                                | No (true)   |
+| `MAX_COMMITS_PER_RUN`  | Max commits fetched per repo/branch per run                        | No (100)    |
+| `SIGNATURE`            | Text appended to every published message                           | No          |
 
 ---
 
 ## How to get required values
 
-**GitHub Token** — GitHub → Settings → Developer settings → Personal access tokens → Classic token, scope `repo`.
+**GitHub Token** — GitHub → Settings → Developer settings → Personal access tokens → Classic, scope `repo`.
 
 **Telegram Bot** — create via [@BotFather](https://t.me/BotFather), add to the channel as admin with permission to post messages.
 
@@ -168,7 +200,9 @@ python src/main.py           # normal mode
 python src/main.py --debug   # verbose logging
 ```
 
-Requires Python 3.12+.
+Requires Python 3.12+. Requires a reachable PostgreSQL instance with `DATABASE_URL` set in `.env`.
+
+---
 
 ## Project structure
 
