@@ -12,8 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source
 COPY src/ ./src/
 
-# Data directory (will be overridden by volume mount)
-RUN mkdir -p /data && chown app:app /data
 
 USER app
 

@@ -4,18 +4,24 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    volumes:
-      - ./data:/data
-    # Normal mode (default)
-    # To run init mode once: docker compose run --rm gh-autopost --save
+    networks:
+      - default
+      - postgres_net
 
-  # Optional: run init once then exit
+  # Init mode: run once to record existing commits without posting
+  # Usage: docker compose run --rm gh-autopost-init
   gh-autopost-init:
     build: .
     env_file:
       - .env
-    volumes:
-      - ./data:/data
     command: ["--save"]
     profiles:
       - init
+    networks:
+      - default
+      - postgres_net
+
+networks:
+  postgres_net:
+    external: true
+    name: postgres_net

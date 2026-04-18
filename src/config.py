@@ -42,7 +42,7 @@ class Config:
         self.repos: list[str] = _list("REPOS")
         self.branches: list[str] = _list("BRANCHES", "main")
         self.admin_ids: list[int] = [int(x) for x in _list("ADMIN_IDS")]
-        self.db_path: str = os.getenv("DB_PATH", "./data/commits.db")
+        self.database_url: str = _require("DATABASE_URL")
         self.poll_interval: int = _int("POLL_INTERVAL", 30)
         self.signature: str = os.getenv("SIGNATURE", "🤖 GH AutoPost")
         self.filter_merge_commits: bool = _bool("FILTER_MERGE_COMMITS", True)

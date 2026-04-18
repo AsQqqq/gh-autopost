@@ -58,6 +58,13 @@ def _truncate(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
+def _escape_md(text: str) -> str:
+    """Escape Telegram Markdown v1 special characters in plain text segments."""
+    for ch in ("*", "_", "`", "["):
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
+
 def format_commit_message(repo: str, branch: str, detail: dict, signature: str) -> str:
     commit = detail.get("commit", {})
     author_info = commit.get("author", {})
@@ -77,8 +84,9 @@ def format_commit_message(repo: str, branch: str, detail: dict, signature: str) 
     commit_type = classify_commit(message)
     # Only first line for subject; preserve rest as body
     subject, _, body = message.partition("\n")
-    subject = _truncate(subject.strip(), 200)
-    body = _truncate(body.strip(), 500) if body.strip() else ""
+    subject = _escape_md(_truncate(subject.strip(), 200))
+    body = _escape_md(_truncate(body.strip(), 500)) if body.strip() else ""
+    author_name = _escape_md(author_name)
 
     text = (
         f"🔔 *Новый коммит*\n\n"
@@ -114,8 +122,8 @@ def format_batch_message(repo: str, branch: str, commits: list[dict], signature:
         sha = c.get("sha", "")
         html_url = c.get("html_url", "")
         message = commit.get("message", "").strip()
-        subject = _truncate(message.split("\n")[0], 120)
-        author = commit.get("author", {}).get("name", "?")
+        subject = _escape_md(_truncate(message.split("\n")[0], 120))
+        author = _escape_md(commit.get("author", {}).get("name", "?"))
         ctype = classify_commit(message)
         lines.append(f"• {ctype} `{_short_sha(sha)}` — [{subject}]({html_url}) _({author})_")
 

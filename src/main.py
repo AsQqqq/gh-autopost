@@ -50,7 +50,7 @@ def main():
     from telegram_client import TelegramClient
     from processor import CommitProcessor
 
-    storage = Storage(config.db_path)
+    storage = Storage(config.database_url)
     github = GitHubClient(config.github_token)
     telegram = TelegramClient(
         config.telegram_bot_token,
@@ -75,8 +75,7 @@ def main():
         f"=== Starting GH AutoPost ===\n"
         f"  Repos   : {config.repos}\n"
         f"  Branches: {config.branches}\n"
-        f"  Interval: {config.poll_interval}s\n"
-        f"  DB      : {config.db_path}"
+        f"  Interval: {config.poll_interval}s"
     )
 
     while True:

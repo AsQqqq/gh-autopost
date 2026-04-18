@@ -100,13 +100,22 @@ class CommitProcessor:
             logger.error(f"  Failed to publish {sha[:8]}, will retry next run")
 
     def _publish_batch(self, repo: str, branch: str, commits: list[dict]):
-        text = formatter.format_batch_message(repo, branch, commits, self.cfg.signature)
-        ok = self.telegram.publish_commit(text)
+        chunk_size = 10
+        chunks = [commits[i:i + chunk_size] for i in range(0, len(commits), chunk_size)]
+        all_ok = True
 
-        if ok:
-            for c in commits:
-                self.storage.save_commit(repo, branch, c["sha"])
+        for chunk in chunks:
+            text = formatter.format_batch_message(repo, branch, chunk, self.cfg.signature)
+            ok = self.telegram.publish_commit(text)
+            if ok:
+                for c in chunk:
+                    self.storage.save_commit(repo, branch, c["sha"])
+            else:
+                all_ok = False
+                logger.error("  Failed to publish batch chunk, will retry next run")
+                break
 
+        if all_ok:
             authors = {c.get("commit", {}).get("author", {}).get("name", "?") for c in commits}
             first_sha = commits[0]["sha"]
             notif = formatter.format_admin_notification(
@@ -116,8 +125,6 @@ class CommitProcessor:
             )
             self.telegram.notify_admins(self.cfg.admin_ids, notif)
             logger.info(f"  Published batch of {len(commits)} commits")
-        else:
-            logger.error("  Failed to publish batch, will retry next run")
 
     # ------------------------------------------------------------------ #
 
