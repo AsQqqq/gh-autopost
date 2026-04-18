@@ -50,7 +50,7 @@ Monitors GitHub repositories for new commits and publishes them to a Telegram ch
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/your-username/gh-autopost.git
+git clone https://github.com/AsQqqq/gh-autopost.git
 cd gh-autopost
 cp .env.example .env
 # Fill in all variables in .env
